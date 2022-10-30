@@ -1,6 +1,7 @@
 package ss_ge
 
 import (
+	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/golang-module/carbon/v2"
@@ -126,7 +127,14 @@ func parseFlatList(url string) ([]string, error) {
 	return urls, nil
 }
 
+func (p *Parser) Supports(url string) bool {
+	return strings.Contains(url, "ss.ge/en/real-estate/l/")
+}
+
 func (p *Parser) Parse(url string, workerCount int) ([]parser.Flat, error) {
+	if !p.Supports(url) {
+		return nil, errors.New("Unsupported url: " + url)
+	}
 	p.logger.Debug("flat list fetching started")
 	urls, err := parseFlatList(url)
 	p.logger.Debug("flat list fetching finished")
