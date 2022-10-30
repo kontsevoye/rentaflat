@@ -17,3 +17,8 @@ type Flat struct {
 	IsAgency    bool
 	PublishedAt time.Time
 }
+
+type Parser interface {
+	Parse(url string, workerCount int) ([]Flat, error)
+	Supports(url string) bool
+}
