@@ -6,6 +6,8 @@ require (
 	github.com/PuerkitoBio/goquery v1.8.0 // indirect
 	github.com/andybalholm/cascadia v1.3.1 // indirect
 	github.com/golang-module/carbon/v2 v2.2.0 // indirect
+	github.com/google/uuid v1.3.0 // indirect
+	github.com/kelseyhightower/envconfig v1.4.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/dig v1.15.0 // indirect
 	go.uber.org/fx v1.18.2 // indirect

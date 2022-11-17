@@ -1,27 +1,29 @@
-package ss_ge
+package flat_parser
 
 import (
 	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/golang-module/carbon/v2"
-	"github.com/kontsevoye/rentaflat/cmd/parser"
+	"github.com/kontsevoye/rentaflat/internal/config"
 	"go.uber.org/zap"
 	"net/http"
 	"strconv"
 	"strings"
 )
 
-func NewParser(logger *zap.SugaredLogger) *Parser {
-	p := &Parser{
-		logger: logger,
+func NewSsGeParser(logger *zap.Logger, c *config.AppConfig) *SsGeParser {
+	p := &SsGeParser{
+		logger:      logger,
+		workerCount: c.WorkerCount,
 	}
 
 	return p
 }
 
-type Parser struct {
-	logger *zap.SugaredLogger
+type SsGeParser struct {
+	logger      *zap.Logger
+	workerCount int
 }
 
 func trimmer(s string) string {
@@ -31,7 +33,7 @@ func trimmer(s string) string {
 	return trimmed
 }
 
-func parseSingleFlat(url string) (*parser.Flat, error) {
+func parseSingleFlat(url string) (*Flat, error) {
 	res, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -84,7 +86,7 @@ func parseSingleFlat(url string) (*parser.Flat, error) {
 	}
 	contact := splitContact[0]
 
-	flat := &parser.Flat{
+	flat := &Flat{
 		Id:          trimmer(doc.Find(".article_item_id span").Text()),
 		Url:         url,
 		PhotoUrls:   photos,
@@ -127,60 +129,70 @@ func parseFlatList(url string) ([]string, error) {
 	return urls, nil
 }
 
-func (p *Parser) Supports(url string) bool {
+func (p *SsGeParser) Supports(url string) bool {
 	return strings.Contains(url, "ss.ge/en/real-estate/l/")
 }
 
-func (p *Parser) Parse(url string, workerCount int) ([]parser.Flat, error) {
-	if !p.Supports(url) {
-		return nil, errors.New("Unsupported url: " + url)
-	}
-	p.logger.Debug("flat list fetching started")
-	urls, err := parseFlatList(url)
-	p.logger.Debug("flat list fetching finished")
+func (p *SsGeParser) Parse(url string) (<-chan Flat, <-chan error) {
+	results := make(chan Flat, 20)
+	errs := make(chan error, 20)
 
-	if err != nil {
-		p.logger.Error(err)
-	}
-
-	urlsCount := len(urls)
-	jobs := make(chan string, urlsCount)
-	results := make(chan parser.Flat, urlsCount)
-	errs := make(chan error)
-
-	for w := 1; w <= workerCount; w++ {
-		go func(urls <-chan string, results chan<- parser.Flat, errs chan<- error) {
-			for url := range urls {
-				p.logger.Debug("worker started job ", url)
-				flat, err := parseSingleFlat(url)
-				if err != nil {
-					errs <- err
-					return
-				}
-				results <- *flat
-				p.logger.Debug("worker finished job ", url)
-			}
-		}(jobs, results, errs)
-	}
-
-	for _, url := range urls {
-		jobs <- url
-	}
-	close(jobs)
-
-	var flats []parser.Flat
-	remainingResults := urlsCount
-	for range urls {
-		p.logger.Debug(remainingResults, " jobs left")
-		select {
-		case flat := <-results:
-			remainingResults -= 1
-			flats = append(flats, flat)
-		case err := <-errs:
-			p.logger.Error(err)
-			return nil, err
+	go func(results chan<- Flat, errs chan<- error) {
+		defer func() {
+			p.logger.Debug("closing result channels")
+			close(results)
+			close(errs)
+		}()
+		if !p.Supports(url) {
+			errs <- errors.New("Unsupported url: " + url)
+			return
 		}
-	}
+		p.logger.Debug("flat list fetching started")
+		urls, err := parseFlatList(url)
+		p.logger.Debug("flat list fetching finished")
 
-	return flats, nil
+		if err != nil {
+			errs <- err
+			return
+		}
+
+		urlsCount := len(urls)
+		jobs := make(chan string, urlsCount)
+		internalResults := make(chan Flat)
+		internalErrs := make(chan error)
+
+		for w := 1; w <= p.workerCount; w++ {
+			go func(urls <-chan string, results chan<- Flat, errs chan<- error) {
+				for url := range urls {
+					p.logger.Debug("worker started job " + url)
+					flat, err := parseSingleFlat(url)
+					if err != nil {
+						errs <- err
+						return
+					}
+					results <- *flat
+					p.logger.Debug("worker finished job " + url)
+				}
+			}(jobs, internalResults, internalErrs)
+		}
+
+		for _, url := range urls {
+			jobs <- url
+		}
+		close(jobs)
+
+		remainingResults := urlsCount
+		for range urls {
+			p.logger.Debug(strconv.Itoa(remainingResults) + " jobs left")
+			select {
+			case flat := <-internalResults:
+				remainingResults -= 1
+				results <- flat
+			case err := <-internalErrs:
+				errs <- err
+			}
+		}
+	}(results, errs)
+
+	return results, errs
 }

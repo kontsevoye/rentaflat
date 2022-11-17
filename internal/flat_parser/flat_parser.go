@@ -1,4 +1,4 @@
-package parser
+package flat_parser
 
 import "time"
 
@@ -19,6 +19,6 @@ type Flat struct {
 }
 
 type Parser interface {
-	Parse(url string, workerCount int) ([]Flat, error)
+	Parse(url string) (<-chan Flat, <-chan error)
 	Supports(url string) bool
 }
