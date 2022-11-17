@@ -1,15 +1,16 @@
 package flat_parser
 
 import (
-	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/golang-module/carbon/v2"
 	"github.com/kontsevoye/rentaflat/internal/config"
 	"go.uber.org/zap"
 	"net/http"
+	neturl "net/url"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 func NewSsGeParser(logger *zap.Logger, c *config.AppConfig) *SsGeParser {
@@ -129,70 +130,120 @@ func parseFlatList(url string) ([]string, error) {
 	return urls, nil
 }
 
-func (p *SsGeParser) Supports(url string) bool {
-	return strings.Contains(url, "ss.ge/en/real-estate/l/")
+func (p *SsGeParser) generateUrl() *neturl.URL {
+	url, _ := neturl.Parse("https://ss.ge/en/real-estate/l/Flat/For-Rent")
+	query := url.Query()
+	query.Set("Page", "1")
+	query.Set("CurrencyId", "1")
+	query.Set("WithImageOnly", "true")
+	query.Set("WithImageOnly", "true")
+	query.Set("Sort.SortExpression", "\"OrderDate\" DESC")
+	url.RawQuery = query.Encode()
+
+	return url
 }
 
-func (p *SsGeParser) Parse(url string) (<-chan Flat, <-chan error) {
-	results := make(chan Flat, 20)
-	errs := make(chan error, 20)
+func (p *SsGeParser) work(flatListUrl *neturl.URL, request Request, jobUrls chan<- string, results chan<- Flat) error {
+	p.logger.Debug(
+		"flat list fetching started",
+		zap.String("url", flatListUrl.String()),
+		zap.String("lastId", request.LastId),
+	)
+	flatUrls, err := parseFlatList(flatListUrl.String())
+	p.logger.Debug(
+		"flat list fetching finished",
+		zap.String("url", flatListUrl.String()),
+		zap.String("lastId", request.LastId),
+	)
+	if err != nil {
+		return err
+	}
 
-	go func(results chan<- Flat, errs chan<- error) {
-		defer func() {
-			p.logger.Debug("closing result channels")
-			close(results)
-			close(errs)
-		}()
-		if !p.Supports(url) {
-			errs <- errors.New("Unsupported url: " + url)
-			return
+	for _, flatUrl := range flatUrls {
+		if request.LastId != "0" && strings.Contains(flatUrl, request.LastId) {
+			p.logger.Debug(
+				"nothing new for me",
+				zap.String("url", flatListUrl.String()),
+				zap.String("lastId", request.LastId),
+				zap.String("flatUrl", flatUrl),
+			)
+			return nil
 		}
-		p.logger.Debug("flat list fetching started")
-		urls, err := parseFlatList(url)
-		p.logger.Debug("flat list fetching finished")
+		jobUrls <- flatUrl
+	}
 
+	containsLastId := false
+	if request.LastId == "0" {
+		containsLastId = true
+	} else {
+		for _, flatUrl := range flatUrls {
+			if strings.Contains(flatUrl, request.LastId) {
+				containsLastId = true
+				break
+			}
+		}
+	}
+
+	if !containsLastId {
+		query := flatListUrl.Query()
+		currentPage, err := strconv.Atoi(query.Get("Page"))
+		if err != nil {
+			return err
+		}
+
+		query.Set("Page", strconv.Itoa(currentPage+1))
+		flatListUrl.RawQuery = query.Encode()
+		err = p.work(flatListUrl, request, jobUrls, results)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (p *SsGeParser) spawnWorker(workerId int, wg *sync.WaitGroup, jobs <-chan string, results chan<- Flat, errs chan<- error) {
+	defer wg.Done()
+	p.logger.Debug("worker spawned", zap.Int("id", workerId))
+	for url := range jobs {
+		p.logger.Debug("worker started job", zap.Int("id", workerId), zap.String("url", url))
+		flat, err := parseSingleFlat(url)
 		if err != nil {
 			errs <- err
 			return
 		}
+		results <- *flat
+		p.logger.Debug("worker finished job", zap.Int("id", workerId), zap.String("url", url))
+	}
+	p.logger.Debug("worker stopped", zap.Int("id", workerId))
+}
 
-		urlsCount := len(urls)
-		jobs := make(chan string, urlsCount)
-		internalResults := make(chan Flat)
-		internalErrs := make(chan error)
+func (p *SsGeParser) Parse(request Request) (<-chan Flat, <-chan error) {
+	results := make(chan Flat, 20)
+	errs := make(chan error, 20)
+	jobs := make(chan string, 20)
 
-		for w := 1; w <= p.workerCount; w++ {
-			go func(urls <-chan string, results chan<- Flat, errs chan<- error) {
-				for url := range urls {
-					p.logger.Debug("worker started job " + url)
-					flat, err := parseSingleFlat(url)
-					if err != nil {
-						errs <- err
-						return
-					}
-					results <- *flat
-					p.logger.Debug("worker finished job " + url)
-				}
-			}(jobs, internalResults, internalErrs)
-		}
+	url := p.generateUrl()
+	p.logger.Debug("url generated", zap.String("url", url.String()))
 
-		for _, url := range urls {
-			jobs <- url
-		}
+	wg := &sync.WaitGroup{}
+	for w := 1; w <= p.workerCount; w++ {
+		wg.Add(1)
+		go p.spawnWorker(w, wg, jobs, results, errs)
+	}
+
+	go func() {
+		err := p.work(url, request, jobs, results)
 		close(jobs)
-
-		remainingResults := urlsCount
-		for range urls {
-			p.logger.Debug(strconv.Itoa(remainingResults) + " jobs left")
-			select {
-			case flat := <-internalResults:
-				remainingResults -= 1
-				results <- flat
-			case err := <-internalErrs:
-				errs <- err
-			}
+		if err != nil {
+			errs <- err
 		}
-	}(results, errs)
+
+		wg.Wait()
+		p.logger.Debug("closing results & errs channels")
+		close(results)
+		close(errs)
+	}()
 
 	return results, errs
 }

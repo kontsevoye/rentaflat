@@ -18,7 +18,10 @@ type Flat struct {
 	PublishedAt time.Time
 }
 
+type Request struct {
+	LastId string
+}
+
 type Parser interface {
-	Parse(url string) (<-chan Flat, <-chan error)
-	Supports(url string) bool
+	Parse(Request) (<-chan Flat, <-chan error)
 }

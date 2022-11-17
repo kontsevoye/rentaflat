@@ -5,6 +5,7 @@ import (
 	"github.com/kontsevoye/rentaflat/internal/flat_parser"
 	"github.com/kontsevoye/rentaflat/internal/flat_storage"
 	"go.uber.org/zap"
+	"sync"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type Scheduler struct {
 	storage flat_storage.Storage
 	ticker  *time.Ticker
 	done    chan interface{}
+	lastId  string
 }
 
 func NewScheduler(p flat_parser.Parser, log *zap.Logger, s flat_storage.Storage, c *config.AppConfig) *Scheduler {
@@ -23,28 +25,41 @@ func NewScheduler(p flat_parser.Parser, log *zap.Logger, s flat_storage.Storage,
 		s,
 		time.NewTicker(c.PollInterval),
 		make(chan interface{}),
+		"0",
 	}
 }
 
 func (s *Scheduler) Run() {
-	task := func() {
-		url := "https://ss.ge/en/real-estate/l/For-Rent?Sort.SortExpression=%22OrderDate%22%20DESC&RealEstateDealTypeId=1&CommercialRealEstateType=&PriceType=false&CurrencyId=1&Context.Request.Query[Query]=&WithImageOnly=true"
-		flats, errs := s.parser.Parse(url)
+	mutex := &sync.Mutex{}
+	task := func(mutex *sync.Mutex) {
+		if !mutex.TryLock() {
+			s.logger.Warn("lock unavailable, skipping task")
+			return
+		} else {
+			s.logger.Debug("lock acquired")
+		}
+		flats, errs := s.parser.Parse(flat_parser.Request{LastId: s.lastId})
+
 		for flat := range flats {
 			s.storage.Store(flat)
+			if flat.Id > s.lastId {
+				s.lastId = flat.Id
+			}
 		}
 		for err := range errs {
 			s.logger.Error(err.Error())
 		}
+		mutex.Unlock()
+		s.logger.Debug("lock released")
 	}
-	go task()
+	go task(mutex)
 	for {
 		select {
 		case <-s.ticker.C:
-			s.logger.Debug("Scheduler tick")
-			task()
+			s.logger.Debug("scheduler tick")
+			task(mutex)
 		case <-s.done:
-			s.logger.Debug("Scheduler shutdown")
+			s.logger.Debug("scheduler shutdown")
 			s.done <- struct{}{}
 			return
 		}
@@ -52,7 +67,7 @@ func (s *Scheduler) Run() {
 }
 
 func (s *Scheduler) Shutdown() {
-	s.logger.Debug("Shutdown call")
+	s.logger.Debug("shutdown call")
 	s.done <- struct{}{}
 	<-s.done
 }
