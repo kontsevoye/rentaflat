@@ -2,23 +2,24 @@ package flat_storage
 
 import (
 	"github.com/kontsevoye/rentaflat/internal/flat_parser"
+	"github.com/kontsevoye/rentaflat/internal/flat_subscriber"
 	"github.com/kontsevoye/rentaflat/internal/uuid"
 	"go.uber.org/zap"
 )
 
-func NewInMemoryStorage(logger *zap.Logger, g uuid.Generator) *InMemoryStorage {
+func NewInMemoryStorage(logger *zap.Logger, generator uuid.Generator) *InMemoryStorage {
 	return &InMemoryStorage{
 		logger,
 		make(map[string]flat_parser.Flat),
-		make(map[uuid.UUID]func(flat_parser.Flat)),
-		g,
+		make(map[uuid.UUID]flat_subscriber.Subscriber),
+		generator,
 	}
 }
 
 type InMemoryStorage struct {
 	logger        *zap.Logger
 	flats         map[string]flat_parser.Flat
-	subscribers   map[uuid.UUID]func(flat_parser.Flat)
+	subscribers   map[uuid.UUID]flat_subscriber.Subscriber
 	uuidGenerator uuid.Generator
 }
 
@@ -29,7 +30,9 @@ func (s *InMemoryStorage) Store(flat flat_parser.Flat) {
 	s.flats[flat.Id] = flat
 
 	for _, subscriber := range s.subscribers {
-		go subscriber(flat)
+		if subscriber.Fits(flat) {
+			go subscriber.Notify(flat)
+		}
 	}
 }
 
@@ -39,14 +42,8 @@ func (s *InMemoryStorage) Has(id string) bool {
 	return exist
 }
 
-func (s *InMemoryStorage) Subscribe(subscriber func(flat_parser.Flat)) uuid.UUID {
-	id, err := s.uuidGenerator.UuidV4()
-	if err != nil {
-		s.logger.Error(err.Error())
-	}
-	s.subscribers[id] = subscriber
-
-	return id
+func (s *InMemoryStorage) Subscribe(subscriber flat_subscriber.Subscriber) {
+	s.subscribers[subscriber.GetId()] = subscriber
 }
 
 func (s *InMemoryStorage) Unsubscribe(id uuid.UUID) {

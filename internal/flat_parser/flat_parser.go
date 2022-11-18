@@ -8,10 +8,10 @@ type Flat struct {
 	PhotoUrls   []string
 	Title       string
 	Description string
-	Area        int
-	Rooms       int
-	Floor       int
-	Price       int
+	Area        uint
+	Rooms       uint
+	Floor       uint
+	Price       uint
 	ContactName string
 	Phone       string
 	IsAgency    bool

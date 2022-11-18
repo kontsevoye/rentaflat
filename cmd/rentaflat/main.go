@@ -6,6 +6,7 @@ import (
 	"github.com/kontsevoye/rentaflat/internal/flat_parser"
 	"github.com/kontsevoye/rentaflat/internal/flat_scheduler"
 	"github.com/kontsevoye/rentaflat/internal/flat_storage"
+	"github.com/kontsevoye/rentaflat/internal/flat_subscriber"
 	"github.com/kontsevoye/rentaflat/internal/logger"
 	"github.com/kontsevoye/rentaflat/internal/uuid"
 	"go.uber.org/fx"
@@ -21,6 +22,7 @@ func main() {
 		fx.Provide(
 			config.NewConfig,
 			logger.NewZapLogger,
+			flat_subscriber.NewStubSubscriberFactory,
 			fx.Annotate(
 				uuid.NewGoogleGenerator,
 				fx.As(new(uuid.Generator)),
@@ -41,17 +43,11 @@ func main() {
 				fx.As(new(flat_parser.Parser)),
 			),
 		),
-		fx.Invoke(func(scheduler *flat_scheduler.Scheduler, storage flat_storage.Storage, logger *zap.Logger) {
-			storage.Subscribe(func(flat flat_parser.Flat) {
-				logger.Info(
-					"got new flat",
-					zap.String("id", flat.Id),
-					zap.String("title", flat.Title),
-					zap.Int("area", flat.Area),
-					zap.Int("price", flat.Price),
-					zap.Time("publishedAt", flat.PublishedAt),
-				)
-			})
+		fx.Invoke(func(scheduler *flat_scheduler.Scheduler, storage flat_storage.Storage, subscriberFactory flat_subscriber.StubSubscriberFactory) {
+			subscriber, _ := subscriberFactory.NewStubSubscriber()
+			subscriber.AddCriteria(flat_subscriber.NewPriceRangeCriteria(600, 700))
+			subscriber.AddCriteria(flat_subscriber.NewAreaRangeCriteria(50, 70))
+			storage.Subscribe(&subscriber)
 			go scheduler.Run()
 		}),
 	).Run()
