@@ -1,11 +1,11 @@
 package logger
 
 import (
-	"github.com/kontsevoye/rentaflat/internal/config"
+	"github.com/kontsevoye/rentaflat/internal/parser"
 	"go.uber.org/zap"
 )
 
-func NewZapLogger(c *config.AppConfig) *zap.Logger {
+func NewZapLogger(c *parser.AppConfig) *zap.Logger {
 	var logger *zap.Logger
 	if c.Environment.IsDev() {
 		logger, _ = zap.NewDevelopment()

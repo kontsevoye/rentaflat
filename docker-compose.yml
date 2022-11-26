@@ -12,9 +12,9 @@ services:
       POSTGRES_DB: db
     volumes:
       - postgres_data:/var/lib/postgresql/data
-  rentaflat:
+  parser:
     build:
-      dockerfile: docker/rentaflat/Dockerfile
+      dockerfile: docker/parser/parser.Dockerfile
       context: .
     environment:
       RFLAT_WORKER_COUNT: 10
@@ -23,7 +23,7 @@ services:
       RFLAT_DATABASE_DSN: "postgres://user:password@postgres:5432/db?sslmode=disable"
   migrate:
     build:
-      dockerfile: docker/migrate/Dockerfile
+      dockerfile: docker/parser/migrate.Dockerfile
       context: .
     volumes:
       - ./migrations:/app/migrations

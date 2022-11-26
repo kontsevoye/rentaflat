@@ -1,20 +1,19 @@
-package flat_storage
+package parser
 
 import (
 	"encoding/json"
 	"errors"
 	"github.com/jmoiron/sqlx"
-	"github.com/kontsevoye/rentaflat/internal/flat_parser"
 	"time"
 )
 
-func NewSqlRepository(connection *sqlx.DB, flatFactory flat_parser.FlatFactory) *SqlRepository {
+func NewSqlRepository(connection *sqlx.DB, flatFactory FlatFactory) *SqlRepository {
 	return &SqlRepository{connection, flatFactory}
 }
 
 type SqlRepository struct {
 	connection  *sqlx.DB
-	flatFactory flat_parser.FlatFactory
+	flatFactory FlatFactory
 }
 
 type rawFlat struct {
@@ -42,7 +41,7 @@ func (f rawFlat) UnmarshalPhotoUrls() ([]string, error) {
 	return photoUrlsRaw, err
 }
 
-func (s *SqlRepository) Add(flat flat_parser.Flat) error {
+func (s *SqlRepository) Add(flat Flat) error {
 	photos, err := json.Marshal(flat.PhotoUrlsAsStrings())
 	if err != nil {
 		return err
@@ -105,17 +104,17 @@ func (s *SqlRepository) Add(flat flat_parser.Flat) error {
 	return err
 }
 
-func (s *SqlRepository) FindByUrl(url string) (flat_parser.Flat, error) {
+func (s *SqlRepository) FindByUrl(url string) (Flat, error) {
 	f := rawFlat{}
 	err := s.connection.Get(&f, "SELECT * FROM public.flats WHERE url = $1", url)
 	if err != nil {
-		return flat_parser.Flat{}, err
+		return Flat{}, err
 	}
 
 	if f.Url == url {
 		urls, err := f.UnmarshalPhotoUrls()
 		if err != nil {
-			return flat_parser.Flat{}, err
+			return Flat{}, err
 		}
 
 		return s.flatFactory.LoadFlat(
@@ -136,7 +135,7 @@ func (s *SqlRepository) FindByUrl(url string) (flat_parser.Flat, error) {
 			f.CreatedAt,
 		)
 	} else {
-		return flat_parser.Flat{}, errors.New("flat not found")
+		return Flat{}, errors.New("flat not found")
 	}
 }
 

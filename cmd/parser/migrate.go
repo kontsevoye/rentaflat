@@ -6,9 +6,8 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/kontsevoye/rentaflat/internal/config"
-	"github.com/kontsevoye/rentaflat/internal/flat_storage"
-	"github.com/kontsevoye/rentaflat/internal/logger"
+	"github.com/kontsevoye/rentaflat/internal/common/logger"
+	"github.com/kontsevoye/rentaflat/internal/parser"
 	_ "github.com/lib/pq"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
@@ -25,9 +24,9 @@ func main() {
 			return &fxevent.ZapLogger{Logger: log}
 		}),
 		fx.Provide(
-			config.NewConfig,
+			parser.NewConfig,
 			logger.NewZapLogger,
-			flat_storage.CreateDbConnection,
+			parser.CreateDbConnection,
 		),
 		fx.Invoke(func(log *zap.Logger, connection *sql.DB, shutdowner fx.Shutdowner) {
 			if !*up && !*down {

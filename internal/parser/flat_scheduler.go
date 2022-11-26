@@ -1,9 +1,6 @@
-package flat_scheduler
+package parser
 
 import (
-	"github.com/kontsevoye/rentaflat/internal/config"
-	"github.com/kontsevoye/rentaflat/internal/flat_parser"
-	"github.com/kontsevoye/rentaflat/internal/flat_storage"
 	"go.uber.org/zap"
 	"sync"
 	"time"
@@ -11,14 +8,14 @@ import (
 
 type Scheduler struct {
 	logger     *zap.Logger
-	parser     flat_parser.Parser
-	repository flat_storage.Repository
+	parser     Parser
+	repository Repository
 	ticker     *time.Ticker
 	done       chan interface{}
 	lastId     string
 }
 
-func NewScheduler(p flat_parser.Parser, log *zap.Logger, s flat_storage.Repository, c *config.AppConfig) *Scheduler {
+func NewScheduler(p Parser, log *zap.Logger, s Repository, c *AppConfig) *Scheduler {
 	return &Scheduler{
 		log,
 		p,
@@ -38,7 +35,7 @@ func (s *Scheduler) Run() {
 		} else {
 			s.logger.Debug("lock acquired")
 		}
-		flats, errs := s.parser.Parse(flat_parser.Request{LastId: s.lastId})
+		flats, errs := s.parser.Parse(Request{LastId: s.lastId})
 
 		for flat := range flats {
 			err := s.repository.Add(flat)

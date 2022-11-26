@@ -1,6 +1,4 @@
-package flat_subscriber
-
-import "github.com/kontsevoye/rentaflat/internal/flat_parser"
+package subscriber
 
 func NewAreaRangeCriteria(from uint, to uint) AreaRangeCriteria {
 	return AreaRangeCriteria{from, to}
@@ -11,6 +9,6 @@ type AreaRangeCriteria struct {
 	to   uint
 }
 
-func (c AreaRangeCriteria) Fits(flat flat_parser.Flat) bool {
+func (c AreaRangeCriteria) Fits(flat Flat) bool {
 	return flat.Area() >= c.from && flat.Area() <= c.to
 }

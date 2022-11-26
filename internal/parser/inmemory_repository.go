@@ -1,27 +1,26 @@
-package flat_storage
+package parser
 
 import (
 	"errors"
-	"github.com/kontsevoye/rentaflat/internal/flat_parser"
-	"github.com/kontsevoye/rentaflat/internal/uuid"
+	"github.com/kontsevoye/rentaflat/internal/common/uuid"
 	"go.uber.org/zap"
 )
 
 func NewInMemoryRepository(logger *zap.Logger, generator uuid.Generator) *InMemoryRepository {
 	return &InMemoryRepository{
 		logger,
-		make(map[string]flat_parser.Flat),
+		make(map[string]Flat),
 		generator,
 	}
 }
 
 type InMemoryRepository struct {
 	logger        *zap.Logger
-	flats         map[string]flat_parser.Flat
+	flats         map[string]Flat
 	uuidGenerator uuid.Generator
 }
 
-func (s *InMemoryRepository) Add(flat flat_parser.Flat) error {
+func (s *InMemoryRepository) Add(flat Flat) error {
 	has, err := s.Has(flat.Url().String())
 	if err != nil {
 		return err
@@ -40,10 +39,10 @@ func (s *InMemoryRepository) Has(id string) (bool, error) {
 	return exist, nil
 }
 
-func (s *InMemoryRepository) FindByUrl(id string) (flat_parser.Flat, error) {
+func (s *InMemoryRepository) FindByUrl(id string) (Flat, error) {
 	flat, exist := s.flats[id]
 	if !exist {
-		return flat_parser.Flat{}, errors.New("flat doesnt exist")
+		return Flat{}, errors.New("flat doesnt exist")
 	}
 
 	return flat, nil

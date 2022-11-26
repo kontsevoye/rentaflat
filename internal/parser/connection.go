@@ -1,13 +1,12 @@
-package flat_storage
+package parser
 
 import (
 	"database/sql"
 	"github.com/jmoiron/sqlx"
-	"github.com/kontsevoye/rentaflat/internal/config"
 	_ "github.com/lib/pq"
 )
 
-func CreateDbConnection(cfg *config.AppConfig) (*sql.DB, error) {
+func CreateDbConnection(cfg *AppConfig) (*sql.DB, error) {
 	db, err := sql.Open(
 		"postgres",
 		cfg.DatabaseDSN,

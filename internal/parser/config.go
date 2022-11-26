@@ -1,4 +1,4 @@
-package config
+package parser
 
 import (
 	"github.com/kelseyhightower/envconfig"

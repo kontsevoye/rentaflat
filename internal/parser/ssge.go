@@ -1,10 +1,9 @@
-package flat_parser
+package parser
 
 import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/golang-module/carbon/v2"
-	"github.com/kontsevoye/rentaflat/internal/config"
 	"go.uber.org/zap"
 	"net/http"
 	neturl "net/url"
@@ -13,7 +12,7 @@ import (
 	"sync"
 )
 
-func NewSsGeParser(logger *zap.Logger, c *config.AppConfig, ff FlatFactory) *SsGeParser {
+func NewSsGeParser(logger *zap.Logger, c *AppConfig, ff FlatFactory) *SsGeParser {
 	return &SsGeParser{
 		logger:      logger,
 		flatFactory: ff,

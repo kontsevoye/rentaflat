@@ -5,7 +5,7 @@ WORKDIR /app
 COPY ./go.mod ./go.sum ./
 RUN go mod download
 
-COPY . .
+COPY ../migrate .
 RUN CGO_ENABLED=0 go build cmd/migrate/migrate.go
 
 FROM scratch
