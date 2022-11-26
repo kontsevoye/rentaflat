@@ -1,9 +1,11 @@
-package parser
+package infrastructure
 
 import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/golang-module/carbon/v2"
+	"github.com/kontsevoye/rentaflat/internal/parser"
+	"github.com/kontsevoye/rentaflat/internal/parser/domain"
 	"go.uber.org/zap"
 	"net/http"
 	neturl "net/url"
@@ -12,7 +14,7 @@ import (
 	"sync"
 )
 
-func NewSsGeParser(logger *zap.Logger, c *AppConfig, ff FlatFactory) *SsGeParser {
+func NewSsGeParser(logger *zap.Logger, c *parser.AppConfig, ff domain.FlatFactory) *SsGeParser {
 	return &SsGeParser{
 		logger:      logger,
 		flatFactory: ff,
@@ -22,7 +24,7 @@ func NewSsGeParser(logger *zap.Logger, c *AppConfig, ff FlatFactory) *SsGeParser
 
 type SsGeParser struct {
 	logger      *zap.Logger
-	flatFactory FlatFactory
+	flatFactory domain.FlatFactory
 	workerCount int
 }
 
@@ -33,7 +35,7 @@ func trimmer(s string) string {
 	return trimmed
 }
 
-func (p *SsGeParser) parseSingleFlat(url string) (*Flat, error) {
+func (p *SsGeParser) parseSingleFlat(url string) (*domain.Flat, error) {
 	parsedUrl, err := neturl.Parse(url)
 	if err != nil {
 		return nil, err
@@ -155,28 +157,28 @@ func (p *SsGeParser) generateUrl() *neturl.URL {
 	return url
 }
 
-func (p *SsGeParser) work(flatListUrl *neturl.URL, request Request, jobUrls chan<- string, results chan<- Flat) error {
+func (p *SsGeParser) work(flatListUrl *neturl.URL, lastServiceId string, jobUrls chan<- string, results chan<- domain.Flat) error {
 	p.logger.Debug(
 		"flat list fetching started",
 		zap.String("url", flatListUrl.String()),
-		zap.String("lastId", request.LastId),
+		zap.String("lastServiceId", lastServiceId),
 	)
 	flatUrls, err := p.parseFlatList(flatListUrl.String())
 	p.logger.Debug(
 		"flat list fetching finished",
 		zap.String("url", flatListUrl.String()),
-		zap.String("lastId", request.LastId),
+		zap.String("lastServiceId", lastServiceId),
 	)
 	if err != nil {
 		return err
 	}
 
 	for _, flatUrl := range flatUrls {
-		if request.LastId != "0" && strings.Contains(flatUrl, request.LastId) {
+		if lastServiceId != "0" && strings.Contains(flatUrl, lastServiceId) {
 			p.logger.Debug(
 				"nothing new for me",
 				zap.String("url", flatListUrl.String()),
-				zap.String("lastId", request.LastId),
+				zap.String("lastId", lastServiceId),
 				zap.String("flatUrl", flatUrl),
 			)
 			return nil
@@ -185,11 +187,11 @@ func (p *SsGeParser) work(flatListUrl *neturl.URL, request Request, jobUrls chan
 	}
 
 	containsLastId := false
-	if request.LastId == "0" {
+	if lastServiceId == "0" {
 		containsLastId = true
 	} else {
 		for _, flatUrl := range flatUrls {
-			if strings.Contains(flatUrl, request.LastId) {
+			if strings.Contains(flatUrl, lastServiceId) {
 				containsLastId = true
 				break
 			}
@@ -205,7 +207,7 @@ func (p *SsGeParser) work(flatListUrl *neturl.URL, request Request, jobUrls chan
 
 		query.Set("Page", strconv.Itoa(currentPage+1))
 		flatListUrl.RawQuery = query.Encode()
-		err = p.work(flatListUrl, request, jobUrls, results)
+		err = p.work(flatListUrl, lastServiceId, jobUrls, results)
 		if err != nil {
 			return err
 		}
@@ -214,7 +216,7 @@ func (p *SsGeParser) work(flatListUrl *neturl.URL, request Request, jobUrls chan
 	return nil
 }
 
-func (p *SsGeParser) spawnWorker(workerId int, wg *sync.WaitGroup, jobs <-chan string, results chan<- Flat, errs chan<- error) {
+func (p *SsGeParser) spawnWorker(workerId int, wg *sync.WaitGroup, jobs <-chan string, results chan<- domain.Flat, errs chan<- error) {
 	defer wg.Done()
 	p.logger.Debug("worker spawned", zap.Int("id", workerId))
 	for url := range jobs {
@@ -230,8 +232,8 @@ func (p *SsGeParser) spawnWorker(workerId int, wg *sync.WaitGroup, jobs <-chan s
 	p.logger.Debug("worker stopped", zap.Int("id", workerId))
 }
 
-func (p *SsGeParser) Parse(request Request) (<-chan Flat, <-chan error) {
-	results := make(chan Flat, 20)
+func (p *SsGeParser) Parse(lastServiceId string) (<-chan domain.Flat, <-chan error) {
+	results := make(chan domain.Flat, 20)
 	errs := make(chan error, 20)
 	jobs := make(chan string, 20)
 
@@ -245,7 +247,7 @@ func (p *SsGeParser) Parse(request Request) (<-chan Flat, <-chan error) {
 	}
 
 	go func() {
-		err := p.work(url, request, jobs, results)
+		err := p.work(url, lastServiceId, jobs, results)
 		close(jobs)
 		if err != nil {
 			errs <- err

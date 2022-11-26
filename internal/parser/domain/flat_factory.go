@@ -1,6 +1,7 @@
-package parser
+package domain
 
 import (
+	"errors"
 	"github.com/kontsevoye/rentaflat/internal/common/uuid"
 	"net/url"
 	"time"
@@ -13,6 +14,16 @@ func NewFlatFactory(generator uuid.Generator) FlatFactory {
 type FlatFactory struct {
 	generator uuid.Generator
 }
+
+var (
+	ErrEmptyServiceId = errors.New("empty service id")
+	ErrEmptyTitle     = errors.New("empty title")
+	ErrEmptyArea      = errors.New("empty area")
+	ErrEmptyRooms     = errors.New("empty rooms")
+	ErrEmptyFloor     = errors.New("empty floor")
+	ErrEmptyPrice     = errors.New("empty price")
+	ErrEmptyPhone     = errors.New("empty phone")
+)
 
 func (f FlatFactory) NewFlat(
 	serviceId string,
@@ -30,6 +41,27 @@ func (f FlatFactory) NewFlat(
 	publishedAt time.Time,
 ) (*Flat, error) {
 	id, err := f.generator.UuidV4()
+	if serviceId == "" {
+		return nil, ErrEmptyServiceId
+	}
+	if title == "" {
+		return nil, ErrEmptyTitle
+	}
+	if area == 0 {
+		return nil, ErrEmptyArea
+	}
+	if rooms == 0 {
+		return nil, ErrEmptyRooms
+	}
+	if floor == 0 {
+		return nil, ErrEmptyFloor
+	}
+	if price == 0 {
+		return nil, ErrEmptyPrice
+	}
+	if phone == "" {
+		return nil, ErrEmptyPhone
+	}
 
 	return &Flat{
 		id:          id,

@@ -5,6 +5,12 @@ import (
 	"github.com/kontsevoye/rentaflat/internal/common/logger"
 	"github.com/kontsevoye/rentaflat/internal/common/uuid"
 	"github.com/kontsevoye/rentaflat/internal/parser"
+	"github.com/kontsevoye/rentaflat/internal/parser/app"
+	"github.com/kontsevoye/rentaflat/internal/parser/app/command"
+	"github.com/kontsevoye/rentaflat/internal/parser/app/query"
+	"github.com/kontsevoye/rentaflat/internal/parser/domain"
+	"github.com/kontsevoye/rentaflat/internal/parser/infrastructure"
+	"github.com/kontsevoye/rentaflat/internal/parser/port"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
@@ -18,30 +24,33 @@ func main() {
 		fx.Provide(
 			parser.NewConfig,
 			logger.NewZapLogger,
-			parser.NewFlatFactory,
-			parser.CreateDbConnection,
-			parser.CreateDbxConnection,
+			domain.NewFlatFactory,
+			infrastructure.CreateDbConnection,
+			infrastructure.CreateDbxConnection,
+			command.NewParseFlatListHandler,
+			query.NewGetLastFlatServiceIdHandler,
+			app.NewApplication,
 			fx.Annotate(
-				parser.NewSqlRepository,
-				fx.As(new(parser.Repository)),
+				infrastructure.NewSqlRepository,
+				fx.As(new(domain.Repository)),
 			),
 			fx.Annotate(
 				uuid.NewGoogleGenerator,
 				fx.As(new(uuid.Generator)),
 			),
 			fx.Annotate(
-				parser.NewScheduler,
-				fx.OnStop(func(_ context.Context, s *parser.Scheduler) error {
+				port.NewScheduler,
+				fx.OnStop(func(_ context.Context, s *port.Scheduler) error {
 					s.Shutdown()
 					return nil
 				}),
 			),
 			fx.Annotate(
-				parser.NewSsGeParser,
-				fx.As(new(parser.Parser)),
+				infrastructure.NewSsGeParser,
+				fx.As(new(domain.Parser)),
 			),
 		),
-		fx.Invoke(func(scheduler *parser.Scheduler) {
+		fx.Invoke(func(scheduler *port.Scheduler) {
 			go scheduler.Run()
 		}),
 	).Run()

@@ -1,4 +1,4 @@
-package parser
+package domain
 
 import (
 	"github.com/kontsevoye/rentaflat/internal/common/uuid"

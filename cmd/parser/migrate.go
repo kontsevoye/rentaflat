@@ -8,6 +8,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/kontsevoye/rentaflat/internal/common/logger"
 	"github.com/kontsevoye/rentaflat/internal/parser"
+	"github.com/kontsevoye/rentaflat/internal/parser/infrastructure"
 	_ "github.com/lib/pq"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
@@ -26,7 +27,7 @@ func main() {
 		fx.Provide(
 			parser.NewConfig,
 			logger.NewZapLogger,
-			parser.CreateDbConnection,
+			infrastructure.CreateDbConnection,
 		),
 		fx.Invoke(func(log *zap.Logger, connection *sql.DB, shutdowner fx.Shutdowner) {
 			if !*up && !*down {

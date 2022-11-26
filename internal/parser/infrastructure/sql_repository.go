@@ -1,19 +1,19 @@
-package parser
+package infrastructure
 
 import (
 	"encoding/json"
-	"errors"
 	"github.com/jmoiron/sqlx"
+	"github.com/kontsevoye/rentaflat/internal/parser/domain"
 	"time"
 )
 
-func NewSqlRepository(connection *sqlx.DB, flatFactory FlatFactory) *SqlRepository {
+func NewSqlRepository(connection *sqlx.DB, flatFactory domain.FlatFactory) *SqlRepository {
 	return &SqlRepository{connection, flatFactory}
 }
 
 type SqlRepository struct {
 	connection  *sqlx.DB
-	flatFactory FlatFactory
+	flatFactory domain.FlatFactory
 }
 
 type rawFlat struct {
@@ -34,14 +34,18 @@ type rawFlat struct {
 	CreatedAt   time.Time `db:"created_at"`
 }
 
-func (f rawFlat) UnmarshalPhotoUrls() ([]string, error) {
+func (f rawFlat) isInitialized() bool {
+	return f.Id != ""
+}
+
+func (f rawFlat) unmarshalPhotoUrls() ([]string, error) {
 	var photoUrlsRaw []string
 	err := json.Unmarshal(f.PhotoUrls, &photoUrlsRaw)
 
 	return photoUrlsRaw, err
 }
 
-func (s *SqlRepository) Add(flat Flat) error {
+func (s *SqlRepository) Add(flat domain.Flat) error {
 	photos, err := json.Marshal(flat.PhotoUrlsAsStrings())
 	if err != nil {
 		return err
@@ -104,17 +108,17 @@ func (s *SqlRepository) Add(flat Flat) error {
 	return err
 }
 
-func (s *SqlRepository) FindByUrl(url string) (Flat, error) {
+func (s *SqlRepository) FindByUrl(url string) (domain.Flat, error) {
 	f := rawFlat{}
 	err := s.connection.Get(&f, "SELECT * FROM public.flats WHERE url = $1", url)
 	if err != nil {
-		return Flat{}, err
+		return domain.Flat{}, err
 	}
 
-	if f.Url == url {
-		urls, err := f.UnmarshalPhotoUrls()
+	if f.isInitialized() {
+		urls, err := f.unmarshalPhotoUrls()
 		if err != nil {
-			return Flat{}, err
+			return domain.Flat{}, err
 		}
 
 		return s.flatFactory.LoadFlat(
@@ -135,7 +139,7 @@ func (s *SqlRepository) FindByUrl(url string) (Flat, error) {
 			f.CreatedAt,
 		)
 	} else {
-		return Flat{}, errors.New("flat not found")
+		return domain.Flat{}, domain.ErrFlatNotFoundWithId(url)
 	}
 }
 
@@ -144,4 +148,39 @@ func (s *SqlRepository) Has(url string) (bool, error) {
 	err := s.connection.Get(&has, "SELECT COUNT(*) > 0 as has FROM public.flats WHERE url = $1", url)
 
 	return has, err
+}
+
+func (s *SqlRepository) FindLatest() (domain.Flat, error) {
+	f := rawFlat{}
+	err := s.connection.Get(&f, "SELECT * FROM public.flats ORDER BY published_at DESC LIMIT 1")
+	if err != nil {
+		return domain.Flat{}, err
+	}
+
+	if f.isInitialized() {
+		urls, err := f.unmarshalPhotoUrls()
+		if err != nil {
+			return domain.Flat{}, err
+		}
+
+		return s.flatFactory.LoadFlat(
+			f.Id,
+			f.ServiceId,
+			f.Url,
+			urls,
+			f.Title,
+			f.Description,
+			f.Area,
+			f.Rooms,
+			f.Floor,
+			f.Price,
+			f.ContactName,
+			f.Phone,
+			f.IsAgency,
+			f.PublishedAt,
+			f.CreatedAt,
+		)
+	} else {
+		return domain.Flat{}, domain.ErrFlatNotFound
+	}
 }
