@@ -13,17 +13,17 @@ import (
 	"sync"
 )
 
-func NewSsGeParser(logger *zap.Logger, c *config.AppConfig) *SsGeParser {
-	p := &SsGeParser{
+func NewSsGeParser(logger *zap.Logger, c *config.AppConfig, ff FlatFactory) *SsGeParser {
+	return &SsGeParser{
 		logger:      logger,
+		flatFactory: ff,
 		workerCount: c.WorkerCount,
 	}
-
-	return p
 }
 
 type SsGeParser struct {
 	logger      *zap.Logger
+	flatFactory FlatFactory
 	workerCount int
 }
 
@@ -34,7 +34,12 @@ func trimmer(s string) string {
 	return trimmed
 }
 
-func parseSingleFlat(url string) (*Flat, error) {
+func (p *SsGeParser) parseSingleFlat(url string) (*Flat, error) {
+	parsedUrl, err := neturl.Parse(url)
+	if err != nil {
+		return nil, err
+	}
+
 	res, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -70,6 +75,14 @@ func parseSingleFlat(url string) (*Flat, error) {
 
 		return src
 	})
+	var photoUrls []*neturl.URL
+	for _, photo := range photos {
+		parsedPhotoUrl, err := neturl.Parse(photo)
+		if err != nil {
+			return nil, err
+		}
+		photoUrls = append(photoUrls, parsedPhotoUrl)
+	}
 
 	rawTime := trimmer(doc.Find(".add_date_block").Text())
 	pubTime := carbon.SetTimezone("Asia/Tbilisi").ParseByFormat(rawTime, "d.m.Y/H:i")
@@ -87,26 +100,26 @@ func parseSingleFlat(url string) (*Flat, error) {
 	}
 	contact := splitContact[0]
 
-	flat := &Flat{
-		Id:          trimmer(doc.Find(".article_item_id span").Text()),
-		Url:         url,
-		PhotoUrls:   photos,
-		Title:       doc.Find(".article_in_title h1").Text(),
-		Description: doc.Find(".article_item_desc_body .details_text").Text(),
-		Area:        uint(area),
-		Rooms:       uint(rooms),
-		Floor:       uint(floor),
-		Price:       uint(price),
-		ContactName: contact,
-		Phone:       phone,
-		IsAgency:    isAgency,
-		PublishedAt: pubTime.Carbon2Time(),
-	}
+	flat, err := p.flatFactory.NewFlat(
+		trimmer(doc.Find(".article_item_id span").Text()),
+		parsedUrl,
+		photoUrls,
+		doc.Find(".article_in_title h1").Text(),
+		doc.Find(".article_item_desc_body .details_text").Text(),
+		uint(area),
+		uint(rooms),
+		uint(floor),
+		uint(price),
+		contact,
+		phone,
+		isAgency,
+		pubTime.Carbon2Time(),
+	)
 
-	return flat, nil
+	return flat, err
 }
 
-func parseFlatList(url string) ([]string, error) {
+func (p *SsGeParser) parseFlatList(url string) ([]string, error) {
 	res, err := http.Get(url)
 	if err != nil {
 		return []string{}, err
@@ -149,7 +162,7 @@ func (p *SsGeParser) work(flatListUrl *neturl.URL, request Request, jobUrls chan
 		zap.String("url", flatListUrl.String()),
 		zap.String("lastId", request.LastId),
 	)
-	flatUrls, err := parseFlatList(flatListUrl.String())
+	flatUrls, err := p.parseFlatList(flatListUrl.String())
 	p.logger.Debug(
 		"flat list fetching finished",
 		zap.String("url", flatListUrl.String()),
@@ -207,7 +220,7 @@ func (p *SsGeParser) spawnWorker(workerId int, wg *sync.WaitGroup, jobs <-chan s
 	p.logger.Debug("worker spawned", zap.Int("id", workerId))
 	for url := range jobs {
 		p.logger.Debug("worker started job", zap.Int("id", workerId), zap.String("url", url))
-		flat, err := parseSingleFlat(url)
+		flat, err := p.parseSingleFlat(url)
 		if err != nil {
 			errs <- err
 			return

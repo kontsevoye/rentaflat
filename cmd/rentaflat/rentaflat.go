@@ -23,6 +23,13 @@ func main() {
 			config.NewConfig,
 			logger.NewZapLogger,
 			flat_subscriber.NewStubSubscriberFactory,
+			flat_parser.NewFlatFactory,
+			flat_storage.CreateDbConnection,
+			flat_storage.CreateDbxConnection,
+			fx.Annotate(
+				flat_storage.NewSqlRepository,
+				fx.As(new(flat_storage.Repository)),
+			),
 			fx.Annotate(
 				uuid.NewGoogleGenerator,
 				fx.As(new(uuid.Generator)),
@@ -35,19 +42,11 @@ func main() {
 				}),
 			),
 			fx.Annotate(
-				flat_storage.NewInMemoryStorage,
-				fx.As(new(flat_storage.Storage)),
-			),
-			fx.Annotate(
 				flat_parser.NewSsGeParser,
 				fx.As(new(flat_parser.Parser)),
 			),
 		),
-		fx.Invoke(func(scheduler *flat_scheduler.Scheduler, storage flat_storage.Storage, subscriberFactory flat_subscriber.StubSubscriberFactory) {
-			subscriber, _ := subscriberFactory.NewStubSubscriber()
-			subscriber.AddCriteria(flat_subscriber.NewPriceRangeCriteria(600, 700))
-			subscriber.AddCriteria(flat_subscriber.NewAreaRangeCriteria(50, 70))
-			storage.Subscribe(&subscriber)
+		fx.Invoke(func(scheduler *flat_scheduler.Scheduler, subscriberFactory flat_subscriber.StubSubscriberFactory) {
 			go scheduler.Run()
 		}),
 	).Run()

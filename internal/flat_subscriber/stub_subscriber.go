@@ -59,10 +59,11 @@ func (s *StubSubscriber) Notify(flat flat_parser.Flat) {
 	s.logger.Info(
 		"got new flat",
 		zap.String("uid", s.id.String()),
-		zap.String("id", flat.Id),
-		zap.String("title", flat.Title),
-		zap.Uint("area", flat.Area),
-		zap.Uint("price", flat.Price),
-		zap.Time("publishedAt", flat.PublishedAt),
+		zap.String("id", flat.Id().String()),
+		zap.String("serviceId", flat.ServiceId()),
+		zap.String("title", flat.Title()),
+		zap.Uint("area", flat.Area()),
+		zap.Uint("price", flat.Price()),
+		zap.Time("publishedAt", flat.PublishedAt()),
 	)
 }

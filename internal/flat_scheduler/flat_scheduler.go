@@ -10,15 +10,15 @@ import (
 )
 
 type Scheduler struct {
-	logger  *zap.Logger
-	parser  flat_parser.Parser
-	storage flat_storage.Storage
-	ticker  *time.Ticker
-	done    chan interface{}
-	lastId  string
+	logger     *zap.Logger
+	parser     flat_parser.Parser
+	repository flat_storage.Repository
+	ticker     *time.Ticker
+	done       chan interface{}
+	lastId     string
 }
 
-func NewScheduler(p flat_parser.Parser, log *zap.Logger, s flat_storage.Storage, c *config.AppConfig) *Scheduler {
+func NewScheduler(p flat_parser.Parser, log *zap.Logger, s flat_storage.Repository, c *config.AppConfig) *Scheduler {
 	return &Scheduler{
 		log,
 		p,
@@ -41,9 +41,12 @@ func (s *Scheduler) Run() {
 		flats, errs := s.parser.Parse(flat_parser.Request{LastId: s.lastId})
 
 		for flat := range flats {
-			s.storage.Store(flat)
-			if flat.Id > s.lastId {
-				s.lastId = flat.Id
+			err := s.repository.Add(flat)
+			if err != nil {
+				s.logger.Error("error while saving flat", zap.Error(err))
+			}
+			if flat.ServiceId() > s.lastId {
+				s.lastId = flat.ServiceId()
 			}
 		}
 		for err := range errs {

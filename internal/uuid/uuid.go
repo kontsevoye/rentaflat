@@ -6,4 +6,5 @@ type UUID interface {
 
 type Generator interface {
 	UuidV4() (UUID, error)
+	FromString(string) (UUID, error)
 }

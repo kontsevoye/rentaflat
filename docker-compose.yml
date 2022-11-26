@@ -1,0 +1,39 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15.1
+    restart: always
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+  rentaflat:
+    build:
+      dockerfile: docker/rentaflat/Dockerfile
+      context: .
+    environment:
+      RFLAT_WORKER_COUNT: 10
+      RFLAT_POLL_INTERVAL: 1m
+      RFLAT_ENVIRONMENT: dev
+      RFLAT_DATABASE_DSN: "postgres://user:password@postgres:5432/db?sslmode=disable"
+  migrate:
+    build:
+      dockerfile: docker/migrate/Dockerfile
+      context: .
+    volumes:
+      - ./migrations:/app/migrations
+    command:
+      - "-up"
+    environment:
+      RFLAT_WORKER_COUNT: 10
+      RFLAT_POLL_INTERVAL: 1m
+      RFLAT_ENVIRONMENT: dev
+      RFLAT_DATABASE_DSN: "postgres://user:password@postgres:5432/db?sslmode=disable"
+
+volumes:
+  postgres_data:

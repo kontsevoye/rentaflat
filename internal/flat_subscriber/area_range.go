@@ -12,5 +12,5 @@ type AreaRangeCriteria struct {
 }
 
 func (c AreaRangeCriteria) Fits(flat flat_parser.Flat) bool {
-	return flat.Area >= c.from && flat.Area <= c.to
+	return flat.Area() >= c.from && flat.Area() <= c.to
 }

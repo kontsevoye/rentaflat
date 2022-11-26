@@ -25,3 +25,12 @@ func (u GoogleGenerator) UuidV4() (UUID, error) {
 
 	return GoogleUuid{id}, nil
 }
+
+func (u GoogleGenerator) FromString(input string) (UUID, error) {
+	id, err := uuid.Parse(input)
+	if err != nil {
+		return GoogleUuid{}, err
+	}
+
+	return GoogleUuid{id}, nil
+}

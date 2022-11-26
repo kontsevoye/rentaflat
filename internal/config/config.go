@@ -34,4 +34,5 @@ type AppConfig struct {
 	WorkerCount  int           `default:"10" split_words:"true"`
 	PollInterval time.Duration `default:"1m" split_words:"true"`
 	Environment  environment   `default:"prod"`
+	DatabaseDSN  string        `default:"postgres://user:password@localhost:5432/db?sslmode=disable" split_words:"true"`
 }

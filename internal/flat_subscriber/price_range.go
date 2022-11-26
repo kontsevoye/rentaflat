@@ -12,5 +12,5 @@ type PriceRangeCriteria struct {
 }
 
 func (c PriceRangeCriteria) Fits(flat flat_parser.Flat) bool {
-	return flat.Price >= c.from && flat.Price <= c.to
+	return flat.Price() >= c.from && flat.Price() <= c.to
 }
